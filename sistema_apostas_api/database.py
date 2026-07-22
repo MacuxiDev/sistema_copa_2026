@@ -34,10 +34,10 @@ def get_db():
         db.close()
 
 # Função para criar todas as tabelas no banco de dados
-def create_db_tables():
+def create_db_and_tables():
     Base.metadata.create_all(bind=engine)
     print("Tabelas do banco de dados criadas (ou já existentes).")
 
 # Importar os modelos para que o Base.metadata.create_all os reconheça
 # Isso deve ser feito DEPOIS de Base ser definido
-from . import models
+import models

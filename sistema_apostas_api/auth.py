@@ -8,42 +8,28 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from . import models, schemas
-from .database import get_db # Importa a função para obter a sessão do DB
+import models
+import schemas
+from database import get_db
 
 # --- Configurações de Segurança ---
-# Para gerar uma SECRET_KEY segura, você pode usar:
-# import secrets
-# secrets.token_hex(32) # ou 64 para uma chave mais longa
-SECRET_KEY = "sua_super_secreta_chave_jwt" # Mude para uma chave forte em produção!
-ALGORITHM = "HS256" # Algoritmo de hashing para o JWT
-ACCESS_TOKEN_EXPIRE_MINUTES = 30 # Tempo de expiração do token de acesso em minutos
+SECRET_KEY = "sua_super_secreta_chave_jwt"  # Mude para uma chave forte em produção!
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Contexto para hashing de senhas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Esquema de segurança OAuth2 para autenticação baseada em token
-# O token será esperado no header "Authorization: Bearer <token>"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token")
 
-# --- Funções de Hashing e Verificação de Senhas ---
+# --- Hashing e Verificação de Senhas ---
 def get_password_hash(password: str) -> str:
-    """
-    Gera o hash de uma senha.
-    """
     return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verifica se uma senha em texto plano corresponde a um hash.
-    """
     return pwd_context.verify(plain_password, hashed_password)
 
-# --- Funções de Geração e Validação de JWT ---
+# --- Geração e Validação de JWT ---
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Cria um token de acesso JWT.
-    """
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -54,8 +40,31 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.Usuario:
-    """
-    Dependência para obter o usuário atual a partir do token JWT.
-    Verifica a validade do token e busca o usuário no banco de dados
-    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Não foi possível validar as credenciais",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = schemas.TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
 
+    user = db.query(models.Usuario).filter(models.Usuario.login == token_data.username).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+def get_current_active_user(current_user: models.Usuario = Depends(get_current_user)) -> models.Usuario:
+    if current_user.status != "ativo":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuário inativo")
+    return current_user
+
+def get_current_admin_user(current_user: models.Usuario = Depends(get_current_active_user)) -> models.Usuario:
+    if current_user.tipo_usuario != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado. Requer privilégios de administrador.")
+    return current_user

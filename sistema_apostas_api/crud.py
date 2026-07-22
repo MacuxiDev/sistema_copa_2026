@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_
 from datetime import datetime, timedelta
 
-from . import models, schemas # Importa seus modelos SQLAlchemy e schemas Pydantic
-from .auth import get_password_hash # Para hashing de senhas
-from .utils import _validar_cpf # Importa a função de validação de CPF
+import models, schemas
+from auth import get_password_hash
+from validation import validar_cpf
 
 # --- Funções CRUD para Usuário ---
 def get_usuario_by_login(db: Session, login: str):
@@ -19,7 +19,7 @@ def get_usuario_by_cpf(db: Session, cpf: str):
 
 def create_usuario(db: Session, user: schemas.UsuarioCreate):
     # Validação de CPF
-    if not _validar_cpf(user.cpf):
+    if not validar_cpf(user.cpf):
         return {"erro": "CPF inválido."}
 
     # Verificar se login, email ou CPF já existem
@@ -340,11 +340,12 @@ def seed_data(db: Session):
     print("Populando o banco de dados com dados iniciais (seed)...")
 
     # Fases
-    fase_grupos = models.Fase(nome="Fase de Grupos")
-    fase_oitavas = models.Fase(nome="Oitavas de Final")
-    fase_quartas = models.Fase(nome="Quartas de Final")
-    fase_semifinal = models.Fase(nome="Semifinal")
-    fase_final = models.Fase(nome="Final")
+    hoje = datetime.now()
+    fase_grupos = models.Fase(nome="Fase de Grupos", data_inicio=hoje, data_fim=hoje + timedelta(days=15))
+    fase_oitavas = models.Fase(nome="Oitavas de Final", data_inicio=hoje + timedelta(days=16), data_fim=hoje + timedelta(days=19))
+    fase_quartas = models.Fase(nome="Quartas de Final", data_inicio=hoje + timedelta(days=20), data_fim=hoje + timedelta(days=22))
+    fase_semifinal = models.Fase(nome="Semifinal", data_inicio=hoje + timedelta(days=23), data_fim=hoje + timedelta(days=24))
+    fase_final = models.Fase(nome="Final", data_inicio=hoje + timedelta(days=25), data_fim=hoje + timedelta(days=25))
     db.add_all([fase_grupos, fase_oitavas, fase_quartas, fase_semifinal, fase_final])
     db.commit()
     db.refresh(fase_grupos)
